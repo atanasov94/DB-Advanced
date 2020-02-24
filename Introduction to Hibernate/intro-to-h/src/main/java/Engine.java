@@ -1,5 +1,6 @@
 import entities.Address;
 import entities.Employee;
+import entities.Project;
 import entities.Town;
 
 import javax.persistence.EntityManager;
@@ -7,7 +8,10 @@ import javax.persistence.NoResultException;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class Engine implements Runnable {
 
@@ -46,8 +50,137 @@ public class Engine implements Runnable {
         //}
 
         //7. Addresses with Employee Count
-        this.addressesWithEmployeeCount();
+        //this.addressesWithEmployeeCount();
 
+        //8. Get Employee with Project
+        //try {
+        //    this.getEmployeeWithProject();
+        //} catch (IOException e) {
+        //    e.printStackTrace();
+        //}
+
+        //9. Find Latest 10 Projects
+        //this.findLatestTestProjects();
+        
+        //10. Increase Salary
+        //this.increaseSalary();
+        
+        //11. Remove Towns
+        //try {
+        //    this.removeTowns();
+        //} catch (IOException e) {
+        //    e.printStackTrace();
+        //}
+        
+        //12. Find Employees by First Name
+        //try {
+        //    this.findEmployeesByFirstName();
+        //} catch (IOException e) {
+        //    e.printStackTrace();
+        //}
+
+    }
+
+    private void findEmployeesByFirstName() throws IOException {
+        System.out.println("Enter pattern:");
+        String pattern = reader.readLine();
+
+        List<Employee> employees = this.entityManager
+                .createQuery("FROM Employee "
+                        + "WHERE firstName LIKE CONCAT(:letters, '%')", Employee.class)
+                .setParameter("letters", pattern)
+                .getResultList();
+
+        employees.forEach(empl -> System.out.printf("%s %s - %s - ($%.2f)%n",
+                empl.getFirstName(),
+                empl.getLastName(),
+                empl.getJobTitle(),
+                empl.getSalary()));
+    }
+
+    private void removeTowns() throws IOException {
+        System.out.println("Enter town name:");
+        String town = reader.readLine();
+
+        this.entityManager.getTransaction().begin();
+
+        Town townDelete = this.entityManager.createQuery("FROM Town "
+                + "WHERE name = :town", Town.class)
+                .setParameter("town", town)
+                .getSingleResult();
+
+        List<Address> addressesToDelete = this.entityManager
+                .createQuery("FROM Address WHERE town.id= :id", Address.class)
+                .setParameter("id", townDelete.getId())
+                .getResultList();
+
+        addressesToDelete
+                .forEach(t -> t.getEmployees()
+                        .forEach(em -> em.setAddress(null)));
+
+        addressesToDelete.forEach(this.entityManager::remove);
+        this.entityManager.remove(townDelete);
+
+        int countDeletedAddresses = addressesToDelete.size();
+        System.out.printf("%d address%s in %s deleted",
+                countDeletedAddresses,
+                countDeletedAddresses == 1 ? "" : "es",
+                town);
+
+        this.entityManager.getTransaction().commit();
+    }
+
+    private void increaseSalary() {
+        List<String> departmentsToIncrease = Arrays.asList(
+                "Engineering",
+                "Tool Design",
+                "Marketing",
+                "Information Services");
+
+        this.entityManager.getTransaction().begin();
+
+        List<Employee> employees = this.entityManager
+                .createQuery("FROM Employee WHERE department.name IN (:deps)", Employee.class)
+                .setParameter("deps", departmentsToIncrease)
+                .getResultList();
+
+        employees
+                .forEach(employee ->
+                        employee.setSalary(employee.getSalary().multiply(BigDecimal.valueOf(1 + 0.12))));
+        this.entityManager.flush();
+        this.entityManager.getTransaction().commit();
+
+        employees.forEach(employee ->
+                System.out.printf("%s %s ($%.2f)%n",
+                        employee.getFirstName(),
+                        employee.getLastName(),
+                        employee.getSalary()));
+    }
+
+    private void findLatestTestProjects() {
+        List<Project> projects = this.entityManager.createQuery("SELECT p FROM Project AS p " +
+                "ORDER BY p.startDate DESC", Project.class).setMaxResults(10).getResultList();
+
+        projects.stream().sorted((a, b) -> a.getName().compareTo(b.getName())).forEach(x -> {
+            System.out.println(String.format("Project name: %s\n\tProject Description: %s\n\tProject Start Date:%s\n\tProjectEndDate: %s",
+                    x.getName(), x.getDescription(), x.getStartDate(), x.getEndDate()));
+        });
+    }
+
+    private void getEmployeeWithProject() throws IOException {
+        System.out.println("Enter employee ID:");
+        int id = Integer.parseInt(reader.readLine());
+        Employee employee = this.entityManager.createQuery("SELECT e FROM Employee  AS e " +
+                "WHERE e.id = :id", Employee.class).setParameter("id", id).getSingleResult();
+
+        System.out.printf("%s %s - %s%n\t%s",
+                employee.getFirstName(),
+                employee.getLastName(),
+                employee.getJobTitle(),
+                employee.getProjects().stream()
+                        .map(Project::getName)
+                        .sorted()
+                        .collect(Collectors.joining(System.lineSeparator() + "\t")));
     }
 
     private void addressesWithEmployeeCount() {
